@@ -7,7 +7,12 @@
     self,
     nixpkgs,
   }: let
-    supportedSystems = ["x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin"];
+    supportedSystems = [
+      "x86_64-linux"
+      "aarch64-linux"
+      "x86_64-darwin"
+      "aarch64-darwin"
+    ];
     forAllSystems = f: nixpkgs.lib.genAttrs supportedSystems (system: f nixpkgs.legacyPackages.${system});
 
     stinkpotPackage = {
@@ -20,7 +25,10 @@
         src = lib.cleanSource ./.;
         vendorHash = "sha256-iDlU/176inkilehXft25KjiLt7rUtlMGqod22A3O/ko=";
         env.CGO_ENABLED = "0";
-        ldflags = ["-s" "-w"];
+        ldflags = [
+          "-s"
+          "-w"
+        ];
         meta = {
           description = "sqlite-backed shell history";
           mainProgram = "stinkpot";
@@ -60,6 +68,10 @@
           inherit config;
           extraDescription = "Bind `ctrl-r` to open the stinkpot search and record commands into stinkpot.";
         };
+        enableFishIntegration = lib.hm.shell.mkFishIntegrationOption {
+          inherit config;
+          extraDescription = "Bind 'ctrl-r' to open the stinkpot search and record commands into stinkpot.";
+        };
       };
 
       config = lib.mkIf cfg.enable {
@@ -67,6 +79,9 @@
 
         programs.bash.initExtra = lib.mkIf cfg.enableBashIntegration ''
           eval "$(${lib.getExe cfg.package} init)"
+        '';
+        programs.fish.interactiveShellInit = lib.mkIf cfg.enableFishIntegration ''
+          ${lib.getExe cfg.package} init fish | source
         '';
       };
     };

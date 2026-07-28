@@ -50,12 +50,14 @@ if not, just call eval the init script in your .bashrc:
 
     eval "$(stinkpot init)"
 
+or .config/fish/config.fish:
+
+	stinkpot init fish | source
 
 start by importing your existing bash history into stinkpot:
 
-    stinkpot import
-
-
+    stinkpot import 
+  
 and then hit ctrl+r at your shell to trigger reverse search:
 
     > search history...

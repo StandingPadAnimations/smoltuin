@@ -462,16 +462,40 @@ __stinkpot_search() {
 }
 bind -x '"\C-r": __stinkpot_search'
 `
+const fishInitScript = `function __stinkpot_record --on-event fish_postexec
+ test -n "$argv"; and stinkpot add --exit $status -- $argv
+end
 
+function __stinkpot_search
+ set -l out (stinkpot search -- (commandline -b))
+ if test -n "$out"
+ 	commandline -r $out
+ end
+ commandline -f repaint
+end
+bind \cr __stinkpot_search
+`
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: stinkpot <init|add|search|list|import>")
+		fmt.Fprintln(os.Stderr, "usage: stinkpot <init [bash|fish]|add|search|list|import>")
 		os.Exit(1)
 	}
 
 	switch os.Args[1] {
 	case "init":
-		fmt.Print(initScript)
+		shell := "bash"
+		if len(os.Args) > 2 {
+			shell = os.Args[2]
+		}
+		switch shell {
+			case "bash":
+				fmt.Print(initScript)
+			case "fish":
+				fmt.Print(fishInitScript)
+			default:
+				fmt.Fprintf(os.Stderr, "stinkpot: unknown shell %q (expected bash or fish)\n", shell)
+				os.Exit(1)
+		}
 	case "add":
 		add(os.Args[2:])
 	case "search":
