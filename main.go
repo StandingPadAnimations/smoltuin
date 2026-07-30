@@ -475,9 +475,34 @@ function __stinkpot_search
 end
 bind \cr __stinkpot_search
 `
+const zshInitScript = `if command -v stinkpot >/dev/null 2>&1; then
+    # Record every command + exit code before each prompt
+    __stinkpot_record() {
+        local exit=$?
+        local cmd
+        cmd=$(fc -ln -1 2>/dev/null)
+        [ -n "$cmd" ] && stinkpot add --exit "$exit" -- "$cmd"
+    }
+    precmd_functions+=(__stinkpot_record)
+
+    # Ctrl+R -> stinkpot search
+    __stinkpot_search() {
+        local out
+        out=$(stinkpot search -- "$BUFFER" </dev/tty) || return
+        if [ -n "$out" ]; then
+            BUFFER="$out"
+            CURSOR=${#BUFFER}
+            zle redisplay
+        fi
+    }
+    zle -N __stinkpot_search
+    bindkey '^R' __stinkpot_search
+fi
+`
+
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: stinkpot <init [bash|fish]|add|search|list|import>")
+		fmt.Fprintln(os.Stderr, "usage: stinkpot <init [bash|fish|zsh]|add|search|list|import>")
 		os.Exit(1)
 	}
 
@@ -488,13 +513,15 @@ func main() {
 			shell = os.Args[2]
 		}
 		switch shell {
-			case "bash":
-				fmt.Print(initScript)
-			case "fish":
-				fmt.Print(fishInitScript)
-			default:
-				fmt.Fprintf(os.Stderr, "stinkpot: unknown shell %q (expected bash or fish)\n", shell)
-				os.Exit(1)
+		case "bash":
+			fmt.Print(initScript)
+		case "fish":
+			fmt.Print(fishInitScript)
+		case "zsh":
+			fmt.Print(zshInitScript)
+		default:
+			fmt.Fprintf(os.Stderr, "stinkpot: unknown shell %q (expected bash, fish, or zsh)\n", shell)
+			os.Exit(1)
 		}
 	case "add":
 		add(os.Args[2:])
