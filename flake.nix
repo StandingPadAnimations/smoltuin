@@ -23,7 +23,7 @@
         pname = "stinkpot";
         version = "0.1.0";
         src = lib.cleanSource ./.;
-        vendorHash = "sha256-iDlU/176inkilehXft25KjiLt7rUtlMGqod22A3O/ko=";
+        vendorHash = "sha256-IVPACl1oWnBKGzcXvG5gzev8MwhzIKNI7zwEKJjhFc8=";
         env.CGO_ENABLED = "0";
         ldflags = [
           "-s"
