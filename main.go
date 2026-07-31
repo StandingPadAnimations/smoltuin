@@ -175,7 +175,7 @@ func search(args []string) {
 	m := &model{textinput: ti, all: cands}
 	m.filter()
 
-	p := tea.NewProgram(m, tea.WithOutput(os.Stderr), tea.WithInput(os.Stdin))
+	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	res, err := p.Run()
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "stinkpot:", err)
@@ -488,7 +488,7 @@ const zshInitScript = `if command -v stinkpot >/dev/null 2>&1; then
     # Ctrl+R -> stinkpot search
     __stinkpot_search() {
         local out
-        out=$(stinkpot search -- "$BUFFER" </dev/tty) || return
+        out=$(stinkpot search -- "$BUFFER") || return
         if [ -n "$out" ]; then
             BUFFER="$out"
             CURSOR=${#BUFFER}
