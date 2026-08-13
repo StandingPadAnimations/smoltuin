@@ -446,6 +446,7 @@ __stinkpot_record() {
   local cmd
   cmd=$(HISTTIMEFORMAT='' history 1 | sed '1 s/^[[:space:]]*[0-9]\{1,\}[[:space:]]*//')
   [ -n "$cmd" ] && stinkpot add --exit "$exit" -- "$cmd"
+  return $exit
 }
 case "$PROMPT_COMMAND" in
   *__stinkpot_record*) ;;
