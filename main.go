@@ -464,7 +464,8 @@ __stinkpot_search() {
 bind -x '"\C-r": __stinkpot_search'
 `
 const fishInitScript = `function __stinkpot_record --on-event fish_postexec
- test -n "$argv"; and stinkpot add --exit $status -- $argv
+ set -l exit $status
+ test -n "$argv"; and stinkpot add --exit $exit -- $argv
 end
 
 function __stinkpot_search
