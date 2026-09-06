@@ -70,7 +70,8 @@ func open(path string) (*sql.DB, error) {
 
 		-- walk rows newest-first and stop at the limit instead of scanning
 		-- the whole table and sorting it on every invocation.
-		create index if not exists history_ts_cmd on history(ts desc, cmd);`); err != nil {
+		drop index if exists history_ts_cmd;
+		create index if not exists history_ts_id on history(ts desc, id desc);`); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
@@ -86,7 +87,7 @@ type candidate struct {
 func loadCandidates(db *sql.DB) ([]candidate, error) {
 	rows, err := db.Query(`
 		select cmd, ts from history
-		order by ts desc
+		order by ts desc, id desc
 		limit 10000`,
 	)
 	if err != nil {
@@ -194,7 +195,7 @@ func list(_ []string) {
 	}
 	defer func() { _ = db.Close() }()
 
-	rows, err := db.Query(`select ts, exit, cmd from history order by id desc limit 50`)
+	rows, err := db.Query(`select ts, exit, cmd from history order by ts desc, id desc limit 50`)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "stinkpot:", err)
 		os.Exit(1)

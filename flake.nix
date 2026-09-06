@@ -32,6 +32,7 @@
         meta = {
           description = "sqlite-backed shell history";
           mainProgram = "stinkpot";
+          license = lib.licenses.mit;
           platforms = lib.platforms.unix;
         };
       };
