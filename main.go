@@ -395,7 +395,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.selected = ""
 			return m, tea.Quit
-		case "enter", "tab":
+		case "tab":
+			m.sort = !m.sort
+		case "enter":
 			if m.cursor >= 0 && m.cursor < len(m.filtered) {
 				m.selected = m.filtered[m.cursor].cmd
 			}
@@ -455,7 +457,7 @@ func (m *model) View() tea.View {
 	}
 
 	b.WriteString(styleDim.Render(fmt.Sprintf(
-		"  %d matches · ↑/↓ move · enter accept · esc cancel", len(m.filtered))))
+		"  %d matches · ↑/↓ move · enter accept · esc cancel · ⇥ toggle sort by score", len(m.filtered))))
 	v := tea.NewView(b.String())
 	v.AltScreen = true
 	return v
