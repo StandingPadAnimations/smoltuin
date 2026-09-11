@@ -5,9 +5,11 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"iter"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -80,30 +82,30 @@ func open(path string) (*sql.DB, error) {
 }
 
 type candidate struct {
-	cmd string
 	ts  time.Time
+	cmd string
 }
 
-func loadCandidates(db *sql.DB) ([]candidate, error) {
-	rows, err := db.Query(`
-		select cmd, ts from history
-		order by ts desc, id desc
-		limit 10000`,
-	)
+func candidates(db *sql.DB) iter.Seq[candidate] {
+	const qry = `SELECT cmd, ts FROM history
+		ORDER BY ts DESC, id DESC
+		LIMIT 10000`
+	rows, err := db.Query(qry)
 	if err != nil {
-		return nil, err
+		panic(fmt.Errorf("%s: %w", qry, err))
 	}
-	defer func() { _ = rows.Close() }()
-
-	var out []candidate
-	for rows.Next() {
-		var c string
-		var ts int64
-		if err := rows.Scan(&c, &ts); err == nil {
-			out = append(out, candidate{cmd: c, ts: time.Unix(ts, 0)})
+	return func(yield func(candidate) bool) {
+		defer rows.Close()
+		for rows.Next() {
+			var c string
+			var ts int64
+			if err := rows.Scan(&c, &ts); err == nil {
+				if !yield(candidate{cmd: c, ts: time.Unix(ts, 0)}) {
+					break
+				}
+			}
 		}
 	}
-	return out, rows.Err()
 }
 
 // cmds: store, search, list
@@ -147,6 +149,12 @@ func add(args []string) {
 
 func search(args []string) {
 	fs := flag.NewFlagSet("search", flag.ExitOnError)
+	var flagNoSort *bool
+	{
+		s := os.Getenv("STINKPOT_NO_SORT")
+		b, _ := strconv.ParseBool(s)
+		flagNoSort = fs.Bool("no-sort", b, "do not sort by score (leave sorted by age)")
+	}
 	_ = fs.Parse(args)
 	initial := strings.Join(fs.Args(), " ")
 
@@ -155,12 +163,7 @@ func search(args []string) {
 		fmt.Fprintln(os.Stderr, "stinkpot:", err)
 		os.Exit(1)
 	}
-	cands, err := loadCandidates(db)
-	_ = db.Close()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
-		os.Exit(1)
-	}
+	defer db.Close()
 
 	ti := textinput.New()
 	ti.Prompt = "> "
@@ -173,7 +176,7 @@ func search(args []string) {
 	ti.CursorEnd()
 	ti.Focus()
 
-	m := &model{textinput: ti, all: cands}
+	m := &model{textinput: ti, db: db, sort: !*flagNoSort}
 	m.filter()
 
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -307,28 +310,46 @@ func importBash(args []string) {
 const maxRows = 12
 
 type model struct {
-	textinput textinput.Model
-	all       []candidate
-	filtered  []candidate
-	cursor    int
+	db        *sql.DB
 	selected  string
+	filtered  []candidate
+	textinput textinput.Model
+	cursor    int
+	sort      bool
 }
 
-type candidateSource []candidate
-
-func (c candidateSource) String(i int) string { return c[i].cmd }
-func (c candidateSource) Len() int            { return len(c) }
+// candidateStrings returns the cmd\x00ts abusing that fuzzy allows this and matches only till the NUL byte, but returns the whole string.
+func candidateStrings(it iter.Seq[candidate]) iter.Seq[string] {
+	return func(yield func(string) bool) {
+		for c := range it {
+			if !yield(fmt.Sprintf("%s\x00%x", c.cmd, c.ts.UnixMilli())) {
+				break
+			}
+		}
+	}
+}
 
 func (m *model) filter() {
 	q := m.textinput.Value()
 
 	if strings.TrimSpace(q) == "" {
-		m.filtered = m.all
+		m.filtered = slices.Collect(candidates(m.db))
 	} else {
-		matches := fuzzy.FindFrom(q, candidateSource(m.all))
+		f := fuzzy.FindFromIterNoSort
+		if m.sort {
+			f = fuzzy.FindFromIter
+		}
+		matches := f(q, candidateStrings(candidates(m.db)))
 		out := make([]candidate, len(matches))
 		for i, mt := range matches {
-			out[i] = m.all[mt.Index]
+			var c candidate
+			var t string
+			if c.cmd, t, _ = strings.Cut(mt.Str, "\x00"); t != "" {
+				if ms, _ := strconv.ParseInt(t, 16, 64); ms != 0 {
+					c.ts = time.UnixMilli(ms)
+				}
+			}
+			out[i] = c
 		}
 		m.filtered = out
 	}
