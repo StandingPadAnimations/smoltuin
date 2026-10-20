@@ -85,20 +85,29 @@ type candidate struct {
 	cmd string
 }
 
-func candidates(db *sql.DB) iter.Seq[candidate] {
-	const qry = `SELECT cmd, ts FROM history
+func candidates(db *sql.DB, filterByCwd bool) iter.Seq[candidate] {
+	const qry = `SELECT cmd, ts, cwd FROM history
 		ORDER BY ts DESC, id DESC
 		LIMIT 10000`
 	rows, err := db.Query(qry)
 	if err != nil {
 		panic(fmt.Errorf("%s: %w", qry, err))
 	}
+
+	currentCwd, err := os.Getwd()
+	if err != nil {
+		panic(fmt.Errorf("getwd: %w", err))
+	}
 	return func(yield func(candidate) bool) {
 		defer rows.Close()
 		for rows.Next() {
 			var c string
 			var ts int64
-			if err := rows.Scan(&c, &ts); err == nil {
+			var cwd string
+			if err := rows.Scan(&c, &ts, &cwd); err == nil {
+				if filterByCwd && cwd != currentCwd {
+					continue
+				}
 				if !yield(candidate{cmd: c, ts: time.Unix(ts, 0)}) {
 					break
 				}
@@ -154,6 +163,12 @@ func search(args []string) {
 		b, _ := strconv.ParseBool(s)
 		flagNoSort = fs.Bool("no-sort", b, "do not sort by score (leave sorted by age)")
 	}
+	var flagNoCwd *bool
+	{
+		s := os.Getenv("STINKPOT_NO_CWD")
+		b, _ := strconv.ParseBool(s)
+		flagNoCwd = fs.Bool("no-cwd", b, "do not filter by cwd")
+	}
 	_ = fs.Parse(args)
 	initial := strings.Join(fs.Args(), " ")
 
@@ -175,7 +190,7 @@ func search(args []string) {
 	ti.CursorEnd()
 	ti.Focus()
 
-	m := &model{textinput: ti, db: db, sort: !*flagNoSort}
+	m := &model{textinput: ti, db: db, sort: !*flagNoSort, cwd: !*flagNoCwd}
 	m.filter()
 
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -226,6 +241,7 @@ type model struct {
 	textinput textinput.Model
 	cursor    int
 	sort      bool
+	cwd       bool
 }
 
 // candidateStrings returns the cmd\x00ts abusing that fuzzy allows this and matches only till the NUL byte, but returns the whole string.
@@ -243,13 +259,13 @@ func (m *model) filter() {
 	q := m.textinput.Value()
 
 	if strings.TrimSpace(q) == "" {
-		m.filtered = slices.Collect(candidates(m.db))
+		m.filtered = slices.Collect(candidates(m.db, m.cwd))
 	} else {
 		f := fuzzy.FindFromIterNoSort
 		if m.sort {
 			f = fuzzy.FindFromIter
 		}
-		matches := f(q, candidateStrings(candidates(m.db)))
+		matches := f(q, candidateStrings(candidates(m.db, m.cwd)))
 		out := make([]candidate, len(matches))
 		for i, mt := range matches {
 			var c candidate
@@ -305,8 +321,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "esc":
 			m.selected = ""
 			return m, tea.Quit
-		case "tab":
+		case "shift+tab":
 			m.sort = !m.sort
+		case "tab":
+			m.cwd = !m.cwd
 		case "enter":
 			if m.cursor >= 0 && m.cursor < len(m.filtered) {
 				m.selected = m.filtered[m.cursor].cmd
@@ -367,7 +385,7 @@ func (m *model) View() tea.View {
 	}
 
 	b.WriteString(styleDim.Render(fmt.Sprintf(
-		"  %d matches · ↑/↓ move · enter accept · esc cancel · ⇥ toggle sort by score", len(m.filtered))))
+		"  %d matches | up/uown - move | enter - accept | esc - cancel | tab - toggle filter by directory | shift + tab - toggle sort by score", len(m.filtered))))
 	v := tea.NewView(b.String())
 	v.AltScreen = true
 	return v
