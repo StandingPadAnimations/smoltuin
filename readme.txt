@@ -15,6 +15,8 @@ This is a personal fork that removes support for shells
 other than Bash, and adds support for importing Atuin
 history. The original project is availible on Tangled
 at oppi.li/stinkpot (https://tangled.org/oppi.li/stinkpot/).
+Commits starting from c84b6c6451e9a750f944ac2d3e7c6a54758d314e
+are licensed under the GNU General Public License v3.0 or Later.
 
 stinkpot is a much tinier atuin (https://atuin.sh). i have
 been using atuin for a while, but i don't use most of its
