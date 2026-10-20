@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -218,95 +217,6 @@ func list(_ []string) {
 	}
 }
 
-func importBash(args []string) {
-	fs := flag.NewFlagSet("import", flag.ExitOnError)
-	file := fs.String("file", "", "history file to read (default: $HISTFILE, else ~/.bash_history)")
-	_ = fs.Parse(args)
-
-	path := *file
-	if path == "" {
-		path = os.Getenv("HISTFILE")
-	}
-	if path == "" {
-		path = filepath.Join(os.Getenv("HOME"), ".bash_history")
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
-		os.Exit(1)
-	}
-	defer func() { _ = f.Close() }()
-
-	db, err := open(dbPath())
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
-		os.Exit(1)
-	}
-	defer func() { _ = db.Close() }()
-
-	tx, err := db.Begin()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
-		os.Exit(1)
-	}
-
-	stmt, err := tx.Prepare(`
-		insert into history(cmd, cwd, exit, ts, session) values(?, ?, ?, ?, ?)
-		on conflict(cmd) do update set ts = max(ts, excluded.ts)`)
-	if err != nil {
-		_ = tx.Rollback()
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
-		os.Exit(1)
-	}
-	defer func() { _ = stmt.Close() }()
-
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), 1<<20) // tolerate long command lines
-
-	ts := time.Now().Unix()
-	var last string
-	var n int
-	for sc.Scan() {
-		line := sc.Text()
-		// with HISTTIMEFORMAT set, bash writes a "#<epoch>" line before each cmd.
-		if after, ok := strings.CutPrefix(line, "#"); ok {
-			if t, err := strconv.ParseInt(after, 10, 64); err == nil {
-				ts = t
-				continue
-			}
-		}
-
-		cmd := strings.TrimRight(line, " \t")
-		if strings.TrimSpace(cmd) == "" || cmd == last {
-			continue
-		}
-
-		if _, err := stmt.Exec(cmd, "", 0, ts, ""); err != nil {
-			_ = tx.Rollback()
-			fmt.Fprintln(os.Stderr, "stinkpot:", err)
-			os.Exit(1)
-		}
-
-		last = cmd
-		n++
-	}
-
-	if err := sc.Err(); err != nil {
-		_ = tx.Rollback()
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
-		os.Exit(1)
-	}
-
-	if err := tx.Commit(); err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
-		os.Exit(1)
-	}
-
-	fmt.Fprintf(os.Stderr, "stinkpot: imported %d commands from %s\n", n, path)
-}
-
-// ui
 const maxRows = 12
 
 type model struct {
@@ -463,7 +373,77 @@ func (m *model) View() tea.View {
 	return v
 }
 
-// bash side of things
+func defaultAtuinPath() string {
+	if p := os.Getenv("ATUIN_DB_PATH"); p != "" {
+		return p
+	}
+	dir := os.Getenv("XDG_DATA_HOME")
+	if dir == "" {
+		dir = filepath.Join(os.Getenv("HOME"), ".local", "share")
+	}
+	return filepath.Join(dir, "atuin", "history.db")
+}
+
+func importAtuin(args []string) {
+	fs := flag.NewFlagSet("import", flag.ExitOnError)
+	_ = fs.Parse(args)
+
+	src := defaultAtuinPath()
+	if fs.NArg() > 0 {
+		src = fs.Arg(0)
+	}
+
+	if _, err := os.Stat(src); err != nil {
+		fmt.Fprintf(os.Stderr, "stinkpot: cannot find atuin db at %s: %v\n", src, err)
+		os.Exit(1)
+	}
+
+	db, err := open(dbPath())
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		os.Exit(1)
+	}
+	defer func() { _ = db.Close() }()
+
+	if _, err := db.Exec(`ATTACH DATABASE ? AS atuin`, src); err != nil {
+		fmt.Fprintf(os.Stderr, "stinkpot: attach atuin db: %v\n", err)
+		os.Exit(1)
+	}
+	defer func() { _, _ = db.Exec(`DETACH DATABASE atuin`) }()
+
+	// Trim trailing whitespace/newlines just like add() does, convert ns -> s,
+	// and only update on conflict if the imported command is newer.
+	const importSQL = `
+		INSERT INTO history (cmd, cwd, exit, ts, session)
+		SELECT
+			rtrim(command, ' ' || char(9) || char(10)),
+			cwd,
+			exit,
+			timestamp / 1000000000,
+			session
+		FROM atuin.history
+		WHERE deleted_at IS NULL
+		  AND trim(command, ' ' || char(9) || char(10)) != ''
+		ORDER BY timestamp ASC
+		ON CONFLICT(cmd) DO UPDATE SET
+			cwd     = excluded.cwd,
+			exit    = excluded.exit,
+			ts      = excluded.ts,
+			session = excluded.session
+		WHERE excluded.ts >= history.ts`
+
+	res, err := db.Exec(importSQL)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "stinkpot: import failed: %v\n", err)
+		os.Exit(1)
+	}
+
+	affected, _ := res.RowsAffected()
+	var total int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM history`).Scan(&total)
+	fmt.Fprintf(os.Stderr, "stinkpot: imported %d records from %s (%d unique commands in db)\n", affected, src, total)
+}
+
 const initScript = `# run eval "$(stinkpot init)" at startup
 __stinkpot_record() {
   local exit=$?
@@ -487,44 +467,6 @@ __stinkpot_search() {
 }
 bind -x '"\C-r": __stinkpot_search'
 `
-const fishInitScript = `function __stinkpot_record --on-event fish_postexec
- set -l exit $status
- test -n "$argv"; and stinkpot add --exit $exit -- $argv
-end
-
-function __stinkpot_search
- set -l out (stinkpot search -- (commandline -b))
- if test -n "$out"
- 	commandline -r $out
- end
- commandline -f repaint
-end
-bind \cr __stinkpot_search
-`
-const zshInitScript = `if command -v stinkpot >/dev/null 2>&1; then
-    # Record every command + exit code before each prompt
-    __stinkpot_record() {
-        local exit=$?
-        local cmd
-        cmd=$(fc -ln -1 2>/dev/null)
-        [ -n "$cmd" ] && stinkpot add --exit "$exit" -- "$cmd"
-    }
-    precmd_functions+=(__stinkpot_record)
-
-    # Ctrl+R -> stinkpot search
-    __stinkpot_search() {
-        local out
-        out=$(stinkpot search -- "$BUFFER") || return
-        if [ -n "$out" ]; then
-            BUFFER="$out"
-            CURSOR=${#BUFFER}
-            zle redisplay
-        fi
-    }
-    zle -N __stinkpot_search
-    bindkey '^R' __stinkpot_search
-fi
-`
 
 func main() {
 	if len(os.Args) < 2 {
@@ -534,21 +476,7 @@ func main() {
 
 	switch os.Args[1] {
 	case "init":
-		shell := "bash"
-		if len(os.Args) > 2 {
-			shell = os.Args[2]
-		}
-		switch shell {
-		case "bash":
-			fmt.Print(initScript)
-		case "fish":
-			fmt.Print(fishInitScript)
-		case "zsh":
-			fmt.Print(zshInitScript)
-		default:
-			fmt.Fprintf(os.Stderr, "stinkpot: unknown shell %q (expected bash, fish, or zsh)\n", shell)
-			os.Exit(1)
-		}
+		fmt.Print(initScript)
 	case "add":
 		add(os.Args[2:])
 	case "search":
@@ -556,7 +484,7 @@ func main() {
 	case "list":
 		list(os.Args[2:])
 	case "import":
-		importBash(os.Args[2:])
+		importAtuin(os.Args[2:])
 	default:
 		fmt.Fprintf(os.Stderr, "stinkpot: unknown command %q\n", os.Args[1])
 		os.Exit(1)
