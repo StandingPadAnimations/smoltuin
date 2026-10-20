@@ -11,6 +11,11 @@ stinkpot
 stinkpot is an sqlite backed shell-history searcher for
 bash.
 
+This is a personal fork that removes support for shells
+other than Bash, and adds support for importing Atuin
+history. The original project is availible on Tangled
+at oppi.li/stinkpot (https://tangled.org/oppi.li/stinkpot/).
+
 stinkpot is a much tinier atuin (https://atuin.sh). i have
 been using atuin for a while, but i don't use most of its
 features: the sync server, atuin AI, dotfiles manager,
