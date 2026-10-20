@@ -384,8 +384,17 @@ func (m *model) View() tea.View {
 		b.WriteByte('\n')
 	}
 
+	filterBy := "filter by directory"
+	if m.cwd {
+		filterBy = "show all"
+	}
+	sortBy := "sort by score"
+	if m.sort {
+		sortBy = "sort by time"
+	}
 	b.WriteString(styleDim.Render(fmt.Sprintf(
-		"  %d matches | up/uown - move | enter - accept | esc - cancel | tab - toggle filter by directory | shift + tab - toggle sort by score", len(m.filtered))))
+		"  %d matches | up/down - move | enter - accept | esc - cancel | tab - %s | shift + tab - %s", len(m.filtered), filterBy, sortBy,
+	)))
 	v := tea.NewView(b.String())
 	v.AltScreen = true
 	return v
