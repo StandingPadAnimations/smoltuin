@@ -8,7 +8,6 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -92,40 +91,55 @@ type candidate struct {
 	cmd      string
 	exitFail bool
 }
+type candidateSlice []candidate
 
-func candidates(db *sql.DB, filterByCwd bool, showFailed bool) iter.Seq[candidate] {
-	const qry = `SELECT cmd, ts, cwd, exit FROM history
-		ORDER BY ts DESC, id DESC
-		LIMIT 10000`
-	rows, err := db.Query(qry)
-	if err != nil {
-		panic(fmt.Errorf("%s: %w", qry, err))
-	}
+func (cs candidateSlice) String(i int) string { return cs[i].cmd }
+func (cs candidateSlice) Len() int            { return len(cs) }
 
-	currentCwd, err := os.Getwd()
+func (m *model) reloadCanidates() {
+	rows, err := m.loadRows()
 	if err != nil {
-		panic(fmt.Errorf("getwd: %w", err))
+		return
 	}
-	return func(yield func(candidate) bool) {
-		defer rows.Close()
-		for rows.Next() {
-			var c string
-			var ts int64
-			var cwd string
-			var exit int64
-			if err := rows.Scan(&c, &ts, &cwd, &exit); err == nil {
-				if filterByCwd && cwd != currentCwd {
-					continue
-				}
-				if !showFailed && exit != 0 {
-					continue
-				}
-				if !yield(candidate{cmd: c, ts: time.Unix(ts, 0), exitFail: exit != 0}) {
-					break
-				}
-			}
+	m.allCanidates = rows
+	m.filter()
+}
+
+func (m *model) loadRows() ([]candidate, error) {
+	query := `SELECT cmd, ts, exit FROM history WHERE 1=1`
+	var args []any
+
+	if m.cwd {
+		if currentCwd, err := os.Getwd(); err == nil {
+			query += ` AND cwd = ?`
+			args = append(args, currentCwd)
 		}
 	}
+	if !m.showFailed {
+		query += ` AND exit = 0`
+	}
+	query += ` ORDER BY ts DESC, id DESC LIMIT 10000`
+
+	rows, err := m.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []candidate
+	for rows.Next() {
+		var c string
+		var ts, exit int64
+		if err := rows.Scan(&c, &ts, &exit); err != nil {
+			return nil, err
+		}
+		out = append(out, candidate{
+			cmd:      c,
+			ts:       time.Unix(ts, 0),
+			exitFail: exit != 0,
+		})
+	}
+	return out, rows.Err()
 }
 
 func add(args []string) {
@@ -208,6 +222,7 @@ func search(args []string) {
 	ti.Focus()
 
 	m := &model{textinput: ti, db: db, sort: !*flagNoSort, cwd: !*flagNoCwd, showFailed: !*flagNoExitFail}
+	m.reloadCanidates()
 	m.filter()
 
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -252,14 +267,16 @@ func list(_ []string) {
 const maxRows = 15
 
 type model struct {
-	db         *sql.DB
-	selected   string
-	filtered   []candidate
-	textinput  textinput.Model
-	cursor     int
-	sort       bool
-	cwd        bool
-	showFailed bool
+	db            *sql.DB
+	selected      string
+	allCanidates  candidateSlice
+	filtered      candidateSlice
+	textinput     textinput.Model
+	prevTextInput string
+	cursor        int
+	sort          bool
+	cwd           bool
+	showFailed    bool
 }
 
 // candidateStrings returns the cmd\x00ts abusing that
@@ -277,36 +294,22 @@ func candidateStrings(it iter.Seq[candidate]) iter.Seq[string] {
 
 func (m *model) filter() {
 	q := m.textinput.Value()
-
 	if strings.TrimSpace(q) == "" {
-		m.filtered = slices.Collect(candidates(m.db, m.cwd, m.showFailed))
+		m.filtered = m.allCanidates
 	} else {
-		f := fuzzy.FindFromIterNoSort
+		var matches fuzzy.Matches
 		if m.sort {
-			f = fuzzy.FindFromIter
+			matches = fuzzy.FindFrom(q, candidateSlice(m.allCanidates))
+		} else {
+			matches = fuzzy.FindFromNoSort(q, candidateSlice(m.allCanidates))
 		}
-		matches := f(q, candidateStrings(candidates(m.db, m.cwd, m.showFailed)))
 		out := make([]candidate, len(matches))
 		for i, mt := range matches {
-			var c candidate
-			var t string
-			if c.cmd, t, _ = strings.Cut(mt.Str, "\x00"); t != "" {
-				if ms, _ := strconv.ParseInt(t, 16, 64); ms != 0 {
-					c.ts = time.UnixMilli(ms)
-				}
-			}
-			out[i] = c
+			out[i] = m.allCanidates[mt.Index]
 		}
 		m.filtered = out
 	}
-
-	if m.cursor >= len(m.filtered) {
-		m.cursor = len(m.filtered) - 1
-	}
-
-	if m.cursor < 0 {
-		m.cursor = 0
-	}
+	m.cursor = max(0, min(m.cursor, len(m.filtered)-1))
 }
 
 // shortRelTime renders t as a compact "time ago" string (e.g. "3min", "2d").
@@ -344,8 +347,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.sort = !m.sort
 		case "ctrl+a":
+			m.reloadCanidates()
 			m.showFailed = !m.showFailed
 		case "tab":
+			m.reloadCanidates()
 			m.cwd = !m.cwd
 		case "enter":
 			if m.cursor >= 0 && m.cursor < len(m.filtered) {
@@ -367,7 +372,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.textinput, cmd = m.textinput.Update(msg)
-	m.filter()
+	if m.textinput.Value() != m.prevTextInput {
+		m.prevTextInput = m.textinput.Value()
+		m.filter()
+	}
 	return m, cmd
 }
 
