@@ -393,12 +393,15 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			m.sort = !m.sort
 			m.filter()
+			return m, nil
 		case "ctrl+a":
 			m.showFailed = !m.showFailed
 			m.reloadCanidates()
+			return m, nil
 		case "tab":
 			m.cwd = !m.cwd
 			m.reloadCanidates()
+			return m, nil
 		case "enter":
 			if m.cursor >= 0 && m.cursor < len(m.filtered) {
 				m.selected = m.filtered[m.cursor].cmd
