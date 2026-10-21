@@ -392,12 +392,13 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "shift+tab":
 			m.sort = !m.sort
+			m.filter()
 		case "ctrl+a":
-			m.reloadCanidates()
 			m.showFailed = !m.showFailed
-		case "tab":
 			m.reloadCanidates()
+		case "tab":
 			m.cwd = !m.cwd
+			m.reloadCanidates()
 		case "enter":
 			if m.cursor >= 0 && m.cursor < len(m.filtered) {
 				m.selected = m.filtered[m.cursor].cmd
