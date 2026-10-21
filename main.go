@@ -240,11 +240,11 @@ func add(args []string) {
 
 func search(args []string) {
 	fs := flag.NewFlagSet("search", flag.ExitOnError)
-	var flagNoSort *bool
+	var flagSort *bool
 	{
-		s := os.Getenv("smoltuin_NO_SORT")
+		s := os.Getenv("smoltuin_SORT")
 		b, _ := strconv.ParseBool(s)
-		flagNoSort = fs.Bool("no-sort", b, "do not sort by score (leave sorted by age)")
+		flagSort = fs.Bool("no-sort", b, "sort by score")
 	}
 	var flagNoCwd *bool
 	{
@@ -280,7 +280,7 @@ func search(args []string) {
 	ti.CursorEnd()
 	ti.Focus()
 
-	m := &model{textinput: ti, db: db, sort: !*flagNoSort, cwd: !*flagNoCwd, showFailed: !*flagNoExitFail}
+	m := &model{textinput: ti, db: db, sort: *flagSort, cwd: !*flagNoCwd, showFailed: !*flagNoExitFail}
 	m.reloadCanidates()
 
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
