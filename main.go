@@ -155,19 +155,32 @@ func (m *model) reloadCanidates() {
 }
 
 func (m *model) loadRows() ([]candidate, error) {
-	query := `SELECT cmd, ts, exit FROM history WHERE 1=1`
-	var args []any
+	var (
+		query string
+		args  []any
+	)
+	var exitFilter string
+	if !m.showFailed {
+		exitFilter = ` AND exit = 0`
+	}
 
 	if m.cwd {
 		if currentCwd, err := os.Getwd(); err == nil {
-			query += ` AND cwd = ?`
+			query = `SELECT cmd, ts, exit FROM history
+			         WHERE cwd = ?` + exitFilter + `
+			         ORDER BY ts DESC, id DESC
+			         LIMIT 10000`
 			args = append(args, currentCwd)
 		}
 	}
-	if !m.showFailed {
-		query += ` AND exit = 0`
+
+	if query == "" {
+		query = `SELECT cmd, MAX(ts) AS max_ts, exit FROM history
+		         WHERE 1=1` + exitFilter + `
+		         GROUP BY cmd
+		         ORDER BY max_ts DESC, id DESC
+		         LIMIT 10000`
 	}
-	query += ` ORDER BY ts DESC, id DESC LIMIT 10000`
 
 	rows, err := m.db.Query(query, args...)
 	if err != nil {
@@ -547,7 +560,7 @@ func importAtuin(args []string) {
 		INSERT INTO history (cmd, cwd, exit, ts, session)
 		SELECT
 			rtrim(command, ' ' || char(9) || char(10)),
-			cwd,
+			COALESCE(cwd, ''),
 			exit,
 			timestamp / 1000000000,
 			session
@@ -555,12 +568,12 @@ func importAtuin(args []string) {
 		WHERE deleted_at IS NULL
 		  AND trim(command, ' ' || char(9) || char(10)) != ''
 		ORDER BY timestamp ASC
-		ON CONFLICT(cmd) DO UPDATE SET
-			cwd     = excluded.cwd,
+		ON CONFLICT(cmd, cwd) DO UPDATE SET
 			exit    = excluded.exit,
 			ts      = excluded.ts,
 			session = excluded.session
-		WHERE excluded.ts >= history.ts`
+		WHERE excluded.ts >= history.ts
+	`
 
 	res, err := db.Exec(importSQL)
 	if err != nil {
