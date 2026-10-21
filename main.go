@@ -282,7 +282,6 @@ func search(args []string) {
 
 	m := &model{textinput: ti, db: db, sort: !*flagNoSort, cwd: !*flagNoCwd, showFailed: !*flagNoExitFail}
 	m.reloadCanidates()
-	m.filter()
 
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	res, err := p.Run()
