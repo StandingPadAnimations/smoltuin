@@ -9,7 +9,7 @@ stinkpot
                            "   "
 
 stinkpot is an sqlite backed shell-history searcher for
-bash.
+Bash.
 
 This is a personal fork that removes support for shells
 other than Bash, and adds support for importing Atuin
@@ -20,67 +20,45 @@ on Tangled at oppi.li/stinkpot (https://tangled.org/oppi.li/stinkpot/).
 Commits starting from c84b6c6451e9a750f944ac2d3e7c6a54758d314e
 are licensed under the GNU General Public License v3.0 or Later.
 
-stinkpot is a much tinier atuin (https://atuin.sh). i have
-been using atuin for a while, but i don't use most of its
-features: the sync server, atuin AI, dotfiles manager,
+stinkpot is a much tinier Atuin (https://atuin.sh). I have
+been using Atuin for a while, but I don't use most of its
+features: the sync server, Atuin AI, dotfiles manager,
 script manager or the KV store. while sync is interesting,
-my machines have very different setups and i tend to run
+my machines have very different setups and I tend to run
 very different commands on them.
 
-my only usecase for atuin was the session agnostic history
+My only usecase for Atuin was the session agnostic history
 management, and the searcher TUI. stinkpot provides these
-while being about 400 lines of go.
+while being about 540 lines of go.
 
 stinkpot is a tiny turtle species apparently, hence the
 name.
 
-develop
+Develop
 -------
 
-to build:
+To build:
 
     go build -ldflags "-s -w" -o stinkpot .
 
-usage
+Usage
 -----
 
-if you use home-manager for nixos, stinkpot has a
-home-manager module:
-
-    home-manager.users.<name> = {
-      imports = [
-        ./home.nix
-        inputs.stinkpot.homeManagerModules.default
-      ];
-    };
-
-
-if not, just call eval the init script in your .bashrc:
+Just call eval the init script in your .bashrc:
 
     eval "$(stinkpot init)"
 
-or .config/fish/config.fish:
-
-	stinkpot init fish | source
-
-start by importing your existing bash history into stinkpot:
+If migrating from Atuin, import your history:
 
     stinkpot import 
-  
-and then hit ctrl+r at your shell to trigger reverse search:
 
-    > search history...
-     1s vim flake.nix
-     3m redis-server
-     3m jj l
-    35m jj show m
-    36m jj git fetch
-    39m cd
-    40m vim readme.txt
-      788 matches · ↑/↓ move · enter accept · esc cancel
+and then hit ctrl+r at your shell to trigger reverse search.
+Keybinds for filtering are located at the bottom:
 
-
-hit tab/enter to accept the selection, hit enter again to
-execute. the history database is stored in
-~/.local/share/stinkpot. if upgrades break the DB, just
-delete it and run the import command.
+    Up/Down     - Move
+    Enter       - Confirm selection
+    Tab         - Toggle between commands executed in the working
+                  directory and everywhere
+    Shift + Tab - Sort by either time or fuzzy matching score
+    Ctrl + A    - Hide commands that exited with a status other
+                  than 0
