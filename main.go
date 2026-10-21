@@ -41,13 +41,13 @@ func dbDir() string {
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "stinkpot: cannot find home directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "smoltuin: cannot find home directory: %v\n", err)
 			os.Exit(1)
 		}
 		dir = filepath.Join(home, ".local", "share")
 	}
 
-	dir = filepath.Join(dir, "stinkpot")
+	dir = filepath.Join(dir, "smoltuin")
 	return dir
 }
 
@@ -220,7 +220,7 @@ func add(args []string) {
 
 	db, err := open(dbPath())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 		return
 	}
 	defer func() { _ = db.Close() }()
@@ -232,9 +232,9 @@ func add(args []string) {
 		   exit    = excluded.exit,
 		   ts      = excluded.ts,
 		   session = excluded.session`,
-		cmd, cwd, *exit, time.Now().Unix(), os.Getenv("STINKPOT_SESSION"),
+		cmd, cwd, *exit, time.Now().Unix(), os.Getenv("smoltuin_SESSION"),
 	); err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 	}
 }
 
@@ -242,19 +242,19 @@ func search(args []string) {
 	fs := flag.NewFlagSet("search", flag.ExitOnError)
 	var flagNoSort *bool
 	{
-		s := os.Getenv("STINKPOT_NO_SORT")
+		s := os.Getenv("smoltuin_NO_SORT")
 		b, _ := strconv.ParseBool(s)
 		flagNoSort = fs.Bool("no-sort", b, "do not sort by score (leave sorted by age)")
 	}
 	var flagNoCwd *bool
 	{
-		s := os.Getenv("STINKPOT_NO_CWD")
+		s := os.Getenv("smoltuin_NO_CWD")
 		b, _ := strconv.ParseBool(s)
 		flagNoCwd = fs.Bool("no-cwd", b, "do not filter by cwd")
 	}
 	var flagNoExitFail *bool
 	{
-		s := os.Getenv("STINKPOT_NO_EXIT_FAIL")
+		s := os.Getenv("smoltuin_NO_EXIT_FAIL")
 		b, _ := strconv.ParseBool(s)
 		flagNoExitFail = fs.Bool("no-exit-fail", b, "do not show commands that failed when exiting")
 	}
@@ -264,7 +264,7 @@ func search(args []string) {
 
 	db, err := open(dbPath())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 		os.Exit(1)
 	}
 	defer db.Close()
@@ -286,7 +286,7 @@ func search(args []string) {
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
 	res, err := p.Run()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 		os.Exit(1)
 	}
 	if fm, ok := res.(*model); ok && fm.selected != "" {
@@ -297,20 +297,20 @@ func search(args []string) {
 func list(_ []string) {
 	db, err := open(dbPath())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 		os.Exit(1)
 	}
 	defer func() { _ = db.Close() }()
 
 	rows, err := db.Query(`select ts, exit, cmd from history order by ts desc, id desc limit 50`)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 		os.Exit(1)
 	}
 	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		if rows.Err() != nil {
-			fmt.Fprintln(os.Stderr, "stinkpot:", err)
+			fmt.Fprintln(os.Stderr, "smoltuin:", err)
 			os.Exit(1)
 		}
 		var ts int64
@@ -508,7 +508,7 @@ func defaultAtuinPath() string {
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "stinkpot: cannot find home directory: %v\n", err)
+			fmt.Fprintf(os.Stderr, "smoltuin: cannot find home directory: %v\n", err)
 			os.Exit(1)
 		}
 		dir = filepath.Join(home, ".local", "share")
@@ -526,19 +526,19 @@ func importAtuin(args []string) {
 	}
 
 	if _, err := os.Stat(src); err != nil {
-		fmt.Fprintf(os.Stderr, "stinkpot: cannot find atuin db at %s: %v\n", src, err)
+		fmt.Fprintf(os.Stderr, "smoltuin: cannot find atuin db at %s: %v\n", src, err)
 		os.Exit(1)
 	}
 
 	db, err := open(dbPath())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "stinkpot:", err)
+		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 		os.Exit(1)
 	}
 	defer func() { _ = db.Close() }()
 
 	if _, err := db.Exec(`ATTACH DATABASE ? AS atuin`, src); err != nil {
-		fmt.Fprintf(os.Stderr, "stinkpot: attach atuin db: %v\n", err)
+		fmt.Fprintf(os.Stderr, "smoltuin: attach atuin db: %v\n", err)
 		os.Exit(1)
 	}
 	defer func() { _, _ = db.Exec(`DETACH DATABASE atuin`) }()
@@ -566,19 +566,19 @@ func importAtuin(args []string) {
 
 	res, err := db.Exec(importSQL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "stinkpot: import failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "smoltuin: import failed: %v\n", err)
 		os.Exit(1)
 	}
 
 	affected, _ := res.RowsAffected()
 	var total int
 	_ = db.QueryRow(`SELECT COUNT(*) FROM history`).Scan(&total)
-	fmt.Fprintf(os.Stderr, "stinkpot: imported %d records from %s (%d unique commands in db)\n", affected, src, total)
+	fmt.Fprintf(os.Stderr, "smoltuin: imported %d records from %s (%d unique commands in db)\n", affected, src, total)
 }
 
 const initScript = `
-__stinkpot_last_hist=""
-__stinkpot_record() {
+__smoltuin_last_hist=""
+__smoltuin_record() {
   local exit=$?
   local entry id cmd
   entry=$(HISTTIMEFORMAT='' builtin history 1)
@@ -586,32 +586,32 @@ __stinkpot_record() {
   id=${id%%[[:space:]]*}
 
   # Only record if the history number actually advanced since the last prompt
-  if [ -n "$id" ] && [ -n "$__stinkpot_last_hist" ] && [ "$id" != "$__stinkpot_last_hist" ]; then
+  if [ -n "$id" ] && [ -n "$__smoltuin_last_hist" ] && [ "$id" != "$__stinkpot_last_hist" ]; then
     cmd=$(printf '%s\n' "$entry" | sed '1 s/^[[:space:]]*[0-9]\{1,\}[[:space:]]*//')
-    [ -n "$cmd" ] && stinkpot add --exit "$exit" --cmd="$cmd"
+    [ -n "$cmd" ] && smoltuin add --exit "$exit" --cmd="$cmd"
   fi
-  __stinkpot_last_hist="$id"
+  __smoltuin_last_hist="$id"
   return $exit
 }
 case "$PROMPT_COMMAND" in
-  *__stinkpot_record*) ;;
-  *) PROMPT_COMMAND="__stinkpot_record${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
+  *__smoltuin_record*) ;;
+  *) PROMPT_COMMAND="__smoltuin_record${PROMPT_COMMAND:+; $PROMPT_COMMAND}" ;;
 esac
 
-__stinkpot_search() {
+__smoltuin_search() {
   local out
-  out=$(stinkpot search -- "$READLINE_LINE") || return
+  out=$(smoltuin search -- "$READLINE_LINE") || return
   if [ -n "$out" ]; then
     READLINE_LINE="$out"
     READLINE_POINT=${#READLINE_LINE}
   fi
 }
-bind -x '"\C-r": __stinkpot_search'
+bind -x '"\C-r": __smoltuin_search'
 `
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: stinkpot <init|add|search|list|import>")
+		fmt.Fprintln(os.Stderr, "usage: smoltuin <init|add|search|list|import>")
 		os.Exit(1)
 	}
 
@@ -627,7 +627,7 @@ func main() {
 	case "import":
 		importAtuin(os.Args[2:])
 	default:
-		fmt.Fprintf(os.Stderr, "stinkpot: unknown command %q\n", os.Args[1])
+		fmt.Fprintf(os.Stderr, "smoltuin: unknown command %q\n", os.Args[1])
 		os.Exit(1)
 	}
 }

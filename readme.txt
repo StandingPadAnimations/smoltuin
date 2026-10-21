@@ -1,56 +1,43 @@
-stinkpot
+smoltuin
 --------
-                             _
-                         _  / \  _
-                        (_\/\_/\/_)
-                          /\/ \/\
-                          \/\_/\/
-                           \/_\/
-                           "   "
+smoltuin is a shell-agnostic history manager. It allows
+for searching previously ran commands, with filtering
+by either the working directory or exit status.
 
-stinkpot is an sqlite backed shell-history searcher for
-Bash.
+This started a personal fork of stinkpot (https://tangled.org/oppi.li/stinkpot/)
+that removed support for shells other than Bash, and add support
+for importing Atuin history, filtering by working directory,
+and filtering by whether a command exited with an error or not.
+Given this became a hard fork, I decided to rename it to
+smoltuin, which is based on Atuin (https://atuin.sh) but
+with the word "smol", as this aims to be a smaller Atuin,
+with one purpose only: store shell history, and provide
+fuzzy searching and filtering. No sync, no AI, nothing other
+than shell history. This allows for a much smaller codebase
+(under 1000 lines of code), and a smaller binary (8 MB vs
+41 MB for Atuin 18.23).
 
-This is a personal fork that removes support for shells
-other than Bash, and adds support for importing Atuin
-history. In addition, it also adds filtering by working
-directory (with toggling) and by whether a command exited
-with an error code or not. The original project is availible
-on Tangled at oppi.li/stinkpot (https://tangled.org/oppi.li/stinkpot/).
 Commits starting from c84b6c6451e9a750f944ac2d3e7c6a54758d314e
 are licensed under the GNU General Public License v3.0 or Later.
-
-stinkpot is a much tinier Atuin (https://atuin.sh). I have
-been using Atuin for a while, but I don't use most of its
-features: the sync server, Atuin AI, dotfiles manager,
-script manager or the KV store. while sync is interesting,
-my machines have very different setups and I tend to run
-very different commands on them.
-
-My only usecase for Atuin was the session agnostic history
-management, and the searcher TUI. stinkpot provides these
-while being about 630 lines of go.
-
-stinkpot is a tiny turtle species apparently, hence the
-name.
+Commits before said commit are licensed under the MIT License.
 
 Develop
 -------
 
 To build:
 
-    go build -ldflags "-s -w" -o stinkpot .
+    go build -ldflags "-s -w" -o smoltuin .
 
 Usage
 -----
 
 Just call eval the init script in your .bashrc:
 
-    eval "$(stinkpot init)"
+    eval "$(smoltuin init)"
 
 If migrating from Atuin, import your history:
 
-    stinkpot import 
+    smoltuin import
 
 and then hit ctrl+r at your shell to trigger reverse search.
 Keybinds for filtering are located at the bottom:
