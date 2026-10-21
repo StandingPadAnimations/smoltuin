@@ -397,10 +397,12 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.showFailed = !m.showFailed
 			m.reloadCanidates()
 			return m, nil
-		case "tab":
+		case "ctrl+r":
 			m.cwd = !m.cwd
 			m.reloadCanidates()
 			return m, nil
+		case "tab":
+			fallthrough
 		case "enter":
 			if m.cursor >= 0 && m.cursor < len(m.filtered) {
 				m.selected = m.filtered[m.cursor].cmd
@@ -492,7 +494,7 @@ func (m *model) View() tea.View {
 		showFailed = "hide failed"
 	}
 	b.WriteString(styleDim.Render(fmt.Sprintf(
-		"  %d matches • ↑/↓ move • ↵ ok • esc quit • tab %s • s-tab %s • c-a %s",
+		"  %d matches • ↑/↓ move • ↵ /tab ok • esc quit • c-r %s • s-tab %s • c-a %s",
 		len(m.filtered), filterBy, sortBy, showFailed,
 	)))
 	v := tea.NewView(b.String())
