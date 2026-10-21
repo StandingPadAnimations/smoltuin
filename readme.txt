@@ -1,6 +1,6 @@
 smoltuin
 --------
-smoltuin is a shell-agnostic history manager. It allows
+smoltuin is a history manager for Bash. It allows
 for searching previously ran commands, with filtering
 by either the working directory or exit status.
 
