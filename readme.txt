@@ -29,7 +29,7 @@ very different commands on them.
 
 My only usecase for Atuin was the session agnostic history
 management, and the searcher TUI. stinkpot provides these
-while being about 540 lines of go.
+while being about 560 lines of go.
 
 stinkpot is a tiny turtle species apparently, hence the
 name.

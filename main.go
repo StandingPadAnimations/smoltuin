@@ -22,14 +22,18 @@ import (
 )
 
 var (
-	styleCursor  lipgloss.Style
-	styleDim     lipgloss.Style
-	styleSuccess lipgloss.Style
-	styleFail    lipgloss.Style
+	styleCursorBlue  lipgloss.Style
+	styleCursorPink  lipgloss.Style
+	styleCursorWhite lipgloss.Style
+	styleDim         lipgloss.Style
+	styleSuccess     lipgloss.Style
+	styleFail        lipgloss.Style
 )
 
 func init() {
-	styleCursor = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+	styleCursorBlue = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
+	styleCursorPink = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
+	styleCursorWhite = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 	styleDim = lipgloss.NewStyle().Faint(true)
 	styleFail = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Faint(true)
 }
@@ -245,7 +249,7 @@ func list(_ []string) {
 	}
 }
 
-const maxRows = 12
+const maxRows = 15
 
 type model struct {
 	db         *sql.DB
@@ -387,6 +391,19 @@ func (m *model) View() tea.View {
 	}
 
 	for i := start; i < end; i++ {
+		// Change the cursor color in the
+		// pattern of the trans flag, because
+		// we can be whimsical :3
+		var styleCursor *lipgloss.Style
+		switch i % 4 {
+		case 0:
+			styleCursor = &styleCursorBlue
+		case 1, 3:
+			styleCursor = &styleCursorPink
+		default:
+			styleCursor = &styleCursorWhite
+		}
+
 		c := m.filtered[i]
 		line := strings.ReplaceAll(c.cmd, "\n", "  ")
 		ts := styleDim.Render(fmt.Sprintf("%*s", tsWidth, shortRelTime(c.ts)))
