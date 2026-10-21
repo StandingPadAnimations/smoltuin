@@ -22,13 +22,16 @@ import (
 )
 
 var (
-	styleCursor lipgloss.Style
-	styleDim    lipgloss.Style
+	styleCursor  lipgloss.Style
+	styleDim     lipgloss.Style
+	styleSuccess lipgloss.Style
+	styleFail    lipgloss.Style
 )
 
 func init() {
 	styleCursor = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("4"))
 	styleDim = lipgloss.NewStyle().Faint(true)
+	styleFail = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Faint(true)
 }
 
 func dbDir() string {
@@ -81,12 +84,13 @@ func open(path string) (*sql.DB, error) {
 }
 
 type candidate struct {
-	ts  time.Time
-	cmd string
+	ts       time.Time
+	cmd      string
+	exitFail bool
 }
 
-func candidates(db *sql.DB, filterByCwd bool) iter.Seq[candidate] {
-	const qry = `SELECT cmd, ts, cwd FROM history
+func candidates(db *sql.DB, filterByCwd bool, showFailed bool) iter.Seq[candidate] {
+	const qry = `SELECT cmd, ts, cwd, exit FROM history
 		ORDER BY ts DESC, id DESC
 		LIMIT 10000`
 	rows, err := db.Query(qry)
@@ -104,11 +108,15 @@ func candidates(db *sql.DB, filterByCwd bool) iter.Seq[candidate] {
 			var c string
 			var ts int64
 			var cwd string
-			if err := rows.Scan(&c, &ts, &cwd); err == nil {
+			var exit int64
+			if err := rows.Scan(&c, &ts, &cwd, &exit); err == nil {
 				if filterByCwd && cwd != currentCwd {
 					continue
 				}
-				if !yield(candidate{cmd: c, ts: time.Unix(ts, 0)}) {
+				if !showFailed && exit != 0 {
+					continue
+				}
+				if !yield(candidate{cmd: c, ts: time.Unix(ts, 0), exitFail: exit != 0}) {
 					break
 				}
 			}
@@ -167,6 +175,13 @@ func search(args []string) {
 		b, _ := strconv.ParseBool(s)
 		flagNoCwd = fs.Bool("no-cwd", b, "do not filter by cwd")
 	}
+	var flagNoExitFail *bool
+	{
+		s := os.Getenv("STINKPOT_EXIT_FAIL")
+		b, _ := strconv.ParseBool(s)
+		flagNoExitFail = fs.Bool("exit-fail", b, "show commands that failed when exiting")
+	}
+
 	_ = fs.Parse(args)
 	initial := strings.Join(fs.Args(), " ")
 
@@ -188,7 +203,7 @@ func search(args []string) {
 	ti.CursorEnd()
 	ti.Focus()
 
-	m := &model{textinput: ti, db: db, sort: !*flagNoSort, cwd: !*flagNoCwd}
+	m := &model{textinput: ti, db: db, sort: !*flagNoSort, cwd: !*flagNoCwd, showFailed: !*flagNoExitFail}
 	m.filter()
 
 	p := tea.NewProgram(m, tea.WithOutput(os.Stderr))
@@ -233,13 +248,14 @@ func list(_ []string) {
 const maxRows = 12
 
 type model struct {
-	db        *sql.DB
-	selected  string
-	filtered  []candidate
-	textinput textinput.Model
-	cursor    int
-	sort      bool
-	cwd       bool
+	db         *sql.DB
+	selected   string
+	filtered   []candidate
+	textinput  textinput.Model
+	cursor     int
+	sort       bool
+	cwd        bool
+	showFailed bool
 }
 
 // candidateStrings returns the cmd\x00ts abusing that
@@ -259,13 +275,13 @@ func (m *model) filter() {
 	q := m.textinput.Value()
 
 	if strings.TrimSpace(q) == "" {
-		m.filtered = slices.Collect(candidates(m.db, m.cwd))
+		m.filtered = slices.Collect(candidates(m.db, m.cwd, m.showFailed))
 	} else {
 		f := fuzzy.FindFromIterNoSort
 		if m.sort {
 			f = fuzzy.FindFromIter
 		}
-		matches := f(q, candidateStrings(candidates(m.db, m.cwd)))
+		matches := f(q, candidateStrings(candidates(m.db, m.cwd, m.showFailed)))
 		out := make([]candidate, len(matches))
 		for i, mt := range matches {
 			var c candidate
@@ -323,6 +339,8 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "shift+tab":
 			m.sort = !m.sort
+		case "ctrl+a":
+			m.showFailed = !m.showFailed
 		case "tab":
 			m.cwd = !m.cwd
 		case "enter":
@@ -372,14 +390,17 @@ func (m *model) View() tea.View {
 		c := m.filtered[i]
 		line := strings.ReplaceAll(c.cmd, "\n", "  ")
 		ts := styleDim.Render(fmt.Sprintf("%*s", tsWidth, shortRelTime(c.ts)))
+		b.WriteString(ts)
+		b.WriteByte(' ')
+		b.WriteByte(' ')
 		if i == m.cursor {
-			b.WriteString(ts)
-			b.WriteByte(' ')
 			b.WriteString(styleCursor.Render(line))
 		} else {
-			b.WriteString(ts)
-			b.WriteByte(' ')
-			b.WriteString(line)
+			if c.exitFail {
+				b.WriteString(styleFail.Render(line))
+			} else {
+				b.WriteString(styleDim.Render(line))
+			}
 		}
 		b.WriteByte('\n')
 	}
@@ -392,8 +413,13 @@ func (m *model) View() tea.View {
 	if m.sort {
 		sortBy = "sort by time"
 	}
+	showFailed := "show failed commands"
+	if m.showFailed {
+		showFailed = "hide failed"
+	}
 	b.WriteString(styleDim.Render(fmt.Sprintf(
-		"  %d matches | up/down - move | enter - accept | esc - cancel | tab - %s | shift + tab - %s", len(m.filtered), filterBy, sortBy,
+		"  %d matches • ↑/↓ move • ↵ ok • esc quit • tab %s • s-tab %s • c-a %s",
+		len(m.filtered), filterBy, sortBy, showFailed,
 	)))
 	v := tea.NewView(b.String())
 	v.AltScreen = true
