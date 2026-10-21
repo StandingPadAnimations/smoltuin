@@ -17,6 +17,11 @@ than shell history. This allows for a much smaller codebase
 (under 1000 lines of code), and a smaller binary (8 MB vs
 41 MB for Atuin 18.23).
 
+While Bash is the only natively supported shell (as in we
+have a configuration for it out of the box), the program
+itself can be used in any shell. Hell, you can even pipe
+it with other programs in the command line if you wish.
+
 Commits starting from c84b6c6451e9a750f944ac2d3e7c6a54758d314e
 are licensed under the GNU General Public License v3.0 or Later.
 Commits before said commit are licensed under the MIT License.
