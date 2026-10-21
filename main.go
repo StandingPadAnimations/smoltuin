@@ -180,7 +180,7 @@ func search(args []string) {
 	defer db.Close()
 
 	ti := textinput.New()
-	ti.Prompt = "> "
+	ti.Prompt = "λ "
 	ti.Placeholder = "search history..."
 	styles := textinput.DefaultStyles(true)
 	styles.Focused.Placeholder = styleDim
@@ -497,7 +497,7 @@ bind -x '"\C-r": __stinkpot_search'
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: stinkpot <init [bash|fish|zsh]|add|search|list|import>")
+		fmt.Fprintln(os.Stderr, "usage: stinkpot <init|add|search|list|import>")
 		os.Exit(1)
 	}
 
