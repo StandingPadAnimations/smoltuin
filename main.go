@@ -41,7 +41,7 @@ func dbDir() string {
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
-			fmt.Println("Error: Could not get home directory")
+			fmt.Fprintf(os.Stderr, "stinkpot: cannot find home directory: %v\n", err)
 			os.Exit(1)
 		}
 		dir = filepath.Join(home, ".local", "share")
