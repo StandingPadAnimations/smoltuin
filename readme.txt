@@ -39,7 +39,7 @@ develop
 
 to build:
 
-    go build -o stinkpot .
+    go build -ldflags "-s -w" -o stinkpot .
 
 usage
 -----
