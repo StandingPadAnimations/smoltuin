@@ -536,12 +536,21 @@ func importAtuin(args []string) {
 	fmt.Fprintf(os.Stderr, "stinkpot: imported %d records from %s (%d unique commands in db)\n", affected, src, total)
 }
 
-const initScript = `# run eval "$(stinkpot init)" at startup
+const initScript = `
+__stinkpot_last_hist=""
 __stinkpot_record() {
   local exit=$?
-  local cmd
-  cmd=$(HISTTIMEFORMAT='' history 1 | sed '1 s/^[[:space:]]*[0-9]\{1,\}[[:space:]]*//')
-  [ -n "$cmd" ] && stinkpot add --exit "$exit" -- "$cmd"
+  local entry id cmd
+  entry=$(HISTTIMEFORMAT='' builtin history 1)
+  id=${entry#"${entry%%[![:space:]]*}"}
+  id=${id%%[[:space:]]*}
+
+  # Only record if the history number actually advanced since the last prompt
+  if [ -n "$id" ] && [ -n "$__stinkpot_last_hist" ] && [ "$id" != "$__stinkpot_last_hist" ]; then
+    cmd=$(printf '%s\n' "$entry" | sed '1 s/^[[:space:]]*[0-9]\{1,\}[[:space:]]*//')
+    [ -n "$cmd" ] && stinkpot add --exit "$exit" --cmd="$cmd"
+  fi
+  __stinkpot_last_hist="$id"
   return $exit
 }
 case "$PROMPT_COMMAND" in
