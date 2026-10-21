@@ -463,7 +463,12 @@ func defaultAtuinPath() string {
 	}
 	dir := os.Getenv("XDG_DATA_HOME")
 	if dir == "" {
-		dir = filepath.Join(os.Getenv("HOME"), ".local", "share")
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "stinkpot: cannot find home directory: %v\n", err)
+			os.Exit(1)
+		}
+		dir = filepath.Join(home, ".local", "share")
 	}
 	return filepath.Join(dir, "atuin", "history.db")
 }
