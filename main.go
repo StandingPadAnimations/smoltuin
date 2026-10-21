@@ -37,7 +37,7 @@ func init() {
 }
 
 func dbDir() string {
-	dir := os.Getenv("XDG_DATA_HOME")
+	dir := os.Getenv("XDG_STATE_HOME")
 	if dir == "" {
 		home, err := os.UserHomeDir()
 		if err != nil {
