@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"iter"
 	"math"
 	"os"
 	"path/filepath"
@@ -337,19 +336,6 @@ type model struct {
 	sort          bool
 	cwd           bool
 	showFailed    bool
-}
-
-// candidateStrings returns the cmd\x00ts abusing that
-// fuzzy allows this and matches only till the NUL byte,
-// but returns the whole string.
-func candidateStrings(it iter.Seq[candidate]) iter.Seq[string] {
-	return func(yield func(string) bool) {
-		for c := range it {
-			if !yield(fmt.Sprintf("%s\x00%x", c.cmd, c.ts.UnixMilli())) {
-				break
-			}
-		}
-	}
 }
 
 func (m *model) filter() {
