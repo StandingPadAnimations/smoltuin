@@ -116,8 +116,6 @@ func candidates(db *sql.DB, filterByCwd bool) iter.Seq[candidate] {
 	}
 }
 
-// cmds: store, search, list
-
 func add(args []string) {
 	fs := flag.NewFlagSet("add", flag.ExitOnError)
 	exit := fs.Int("exit", 0, "exit code of the command")
@@ -244,7 +242,9 @@ type model struct {
 	cwd       bool
 }
 
-// candidateStrings returns the cmd\x00ts abusing that fuzzy allows this and matches only till the NUL byte, but returns the whole string.
+// candidateStrings returns the cmd\x00ts abusing that
+// fuzzy allows this and matches only till the NUL byte,
+// but returns the whole string.
 func candidateStrings(it iter.Seq[candidate]) iter.Seq[string] {
 	return func(yield func(string) bool) {
 		for c := range it {
