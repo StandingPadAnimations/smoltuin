@@ -40,11 +40,15 @@ func init() {
 func dbDir() string {
 	dir := os.Getenv("XDG_DATA_HOME")
 	if dir == "" {
-		dir = filepath.Join(os.Getenv("HOME"), ".local", "share")
+		home, err := os.UserHomeDir()
+		if err != nil {
+			fmt.Println("Error: Could not get home directory")
+			os.Exit(1)
+		}
+		dir = filepath.Join(home, ".local", "share")
 	}
 
 	dir = filepath.Join(dir, "stinkpot")
-
 	return dir
 }
 
@@ -170,16 +174,15 @@ func add(args []string) {
 	}
 	defer func() { _ = db.Close() }()
 
-	// re-run of the same command bumps its timestamp
 	cwd, _ := os.Getwd()
 	if _, err := db.Exec(
-		`insert into history(cmd, cwd, exit, ts, session) values(?, ?, ?, ?, ?)
-		 on conflict(cmd) do update set
+		`INSERT INTO history(cmd, cwd, exit, ts, session) VALUES(?, ?, ?, ?, ?)
+		 ON CONFLICT(cmd) DO UPDATE SET
 		   cwd     = excluded.cwd,
 		   exit    = excluded.exit,
 		   ts      = excluded.ts,
 		   session = excluded.session`,
-		cmd, cwd, *exit, time.Now().Unix(), os.Getenv("stinkpot_SESSION"),
+		cmd, cwd, *exit, time.Now().Unix(), os.Getenv("STINKPOT_SESSION"),
 	); err != nil {
 		fmt.Fprintln(os.Stderr, "stinkpot:", err)
 	}
@@ -201,9 +204,9 @@ func search(args []string) {
 	}
 	var flagNoExitFail *bool
 	{
-		s := os.Getenv("STINKPOT_EXIT_FAIL")
+		s := os.Getenv("STINKPOT_NO_EXIT_FAIL")
 		b, _ := strconv.ParseBool(s)
-		flagNoExitFail = fs.Bool("exit-fail", b, "show commands that failed when exiting")
+		flagNoExitFail = fs.Bool("no-exit-fail", b, "do not show commands that failed when exiting")
 	}
 
 	_ = fs.Parse(args)
