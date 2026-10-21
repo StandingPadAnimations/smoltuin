@@ -93,6 +93,45 @@ func open(path string) (*sql.DB, error) {
 			return nil, err
 		}
 	}
+
+	if version < 2 {
+		if _, err := db.Exec(`
+			BEGIN;
+
+			CREATE TABLE IF NOT EXISTS history_new (
+			  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+			  cmd     TEXT NOT NULL,
+			  cwd     TEXT NOT NULL DEFAULT '',
+			  exit    INTEGER,
+			  ts      INTEGER,
+			  session TEXT,
+			  UNIQUE(cmd, cwd)
+			);
+
+			-- Copy existing data if the old history table exists
+			INSERT INTO history_new (id, cmd, cwd, exit, ts, session)
+			SELECT id, cmd, COALESCE(cwd, ''), exit, ts, session
+			FROM history WHERE true
+			ON CONFLICT(cmd, cwd) DO UPDATE SET
+			  exit    = excluded.exit,
+			  ts      = excluded.ts,
+			  session = excluded.session
+			WHERE excluded.ts >= history_new.ts;
+
+			DROP TABLE IF EXISTS history;
+			ALTER TABLE history_new RENAME TO history;
+
+			CREATE INDEX IF NOT EXISTS history_ts_id ON history(ts DESC, id DESC);
+			CREATE INDEX IF NOT EXISTS history_cwd_ts_id ON history(cwd, ts DESC, id DESC);
+
+			PRAGMA user_version = 2;
+			COMMIT;
+		`); err != nil {
+			_, _ = db.Exec(`ROLLBACK`)
+			_ = db.Close()
+			return nil, err
+		}
+	}
 	return db, nil
 }
 
@@ -177,8 +216,7 @@ func add(args []string) {
 	cwd, _ := os.Getwd()
 	if _, err := db.Exec(
 		`INSERT INTO history(cmd, cwd, exit, ts, session) VALUES(?, ?, ?, ?, ?)
-		 ON CONFLICT(cmd) DO UPDATE SET
-		   cwd     = excluded.cwd,
+		 ON CONFLICT(cmd, cwd) DO UPDATE SET
 		   exit    = excluded.exit,
 		   ts      = excluded.ts,
 		   session = excluded.session`,
