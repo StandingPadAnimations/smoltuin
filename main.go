@@ -56,33 +56,39 @@ func open(path string) (*sql.DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
 	}
-
-	dsn := "file:" + path +
-		"?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"
+	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)",
+		filepath.ToSlash(path))
 
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
 	}
 
-	if _, err := db.Exec(`
-		create table if not exists history (
-		  id      integer primary key autoincrement,
-		  cmd     text not null unique,
-		  cwd     text,
-		  exit    integer,
-		  ts      integer,
-		  session text
-		);
-
-		-- walk rows newest-first and stop at the limit instead of scanning
-		-- the whole table and sorting it on every invocation.
-		drop index if exists history_ts_cmd;
-		create index if not exists history_ts_id on history(ts desc, id desc);`); err != nil {
+	var version int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 
+	if version < 1 {
+		if _, err := db.Exec(`
+			CREATE TABLE IF NOT EXISTS history (
+			  id      INTEGER PRIMARY KEY AUTOINCREMENT,
+			  cmd     TEXT NOT NULL UNIQUE,
+			  cwd     TEXT,
+			  exit    INTEGER,
+			  ts      INTEGER,
+			  session TEXT
+			);
+
+			DROP INDEX IF EXISTS history_ts_cmd;
+			CREATE INDEX IF NOT EXISTS history_ts_id ON history(ts DESC, id DESC);
+			PRAGMA user_version = 1;
+		`); err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+	}
 	return db, nil
 }
 
