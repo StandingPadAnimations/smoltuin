@@ -232,7 +232,7 @@ func add(args []string) {
 		   exit    = excluded.exit,
 		   ts      = excluded.ts,
 		   session = excluded.session`,
-		cmd, cwd, *exit, time.Now().Unix(), os.Getenv("smoltuin_SESSION"),
+		cmd, cwd, *exit, time.Now().Unix(), os.Getenv("SMOLTUIN_SESSION"),
 	); err != nil {
 		fmt.Fprintln(os.Stderr, "smoltuin:", err)
 	}
@@ -242,19 +242,19 @@ func search(args []string) {
 	fs := flag.NewFlagSet("search", flag.ExitOnError)
 	var flagSort *bool
 	{
-		s := os.Getenv("smoltuin_SORT")
+		s := os.Getenv("SMOLTUIN_SORT")
 		b, _ := strconv.ParseBool(s)
 		flagSort = fs.Bool("no-sort", b, "sort by score")
 	}
 	var flagNoCwd *bool
 	{
-		s := os.Getenv("smoltuin_NO_CWD")
+		s := os.Getenv("SMOLTUIN_NO_CWD")
 		b, _ := strconv.ParseBool(s)
 		flagNoCwd = fs.Bool("no-cwd", b, "do not filter by cwd")
 	}
 	var flagNoExitFail *bool
 	{
-		s := os.Getenv("smoltuin_NO_EXIT_FAIL")
+		s := os.Getenv("SMOLTUIN_NO_EXIT_FAIL")
 		b, _ := strconv.ParseBool(s)
 		flagNoExitFail = fs.Bool("no-exit-fail", b, "do not show commands that failed when exiting")
 	}
@@ -580,19 +580,21 @@ func importAtuin(args []string) {
 
 const initScript = `
 __smoltuin_last_hist=""
+__smoltuin_last_cmd=""
 __smoltuin_record() {
   local exit=$?
   local entry id cmd
   entry=$(HISTTIMEFORMAT='' builtin history 1)
   id=${entry#"${entry%%[![:space:]]*}"}
   id=${id%%[[:space:]]*}
+  cmd=$(printf '%s\n' "$entry" | sed '1 s/^[[:space:]]*[0-9]\{1,\}[[:space:]]*//')
 
-  # Only record if the history number actually advanced since the last prompt
-  if [ -n "$id" ] && [ -n "$__smoltuin_last_hist" ] && [ "$id" != "$__stinkpot_last_hist" ]; then
-    cmd=$(printf '%s\n' "$entry" | sed '1 s/^[[:space:]]*[0-9]\{1,\}[[:space:]]*//')
-    [ -n "$cmd" ] && smoltuin add --exit "$exit" --cmd="$cmd"
+  # Record if either the history number changed OR the user re-executed the command
+  if [ -n "$cmd" ] && { [ "$id" != "$__smoltuin_last_hist" ] || [ "$cmd" != "$__smoltuin_last_cmd" ]; }; then
+    (smoltuin add --exit "$exit" --cmd "$cmd" &) >/dev/null 2>&1
   fi
   __smoltuin_last_hist="$id"
+  __smoltuin_last_cmd="$cmd"
   return $exit
 }
 case "$PROMPT_COMMAND" in
